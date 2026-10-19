@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DeepSeek-V4.1-Flash 的隔位弱点：复现报告</title>
+<style>
+:root{
+  --paper:#faf6ef;
+  --paper-2:#f3ece1;
+  --ink:#2b2724;
+  --ink-soft:#6b6157;
+  --line:#e2d7c6;
+  --accent:#b4552d;
+  --accent-soft:#f6e5dc;
+  --ok:#3d6b4a;   --ok-soft:#e2ede4;
+  --warn:#6f5518; --warn-soft:#f7edd4;
+  --bad:#9c3a30;  --bad-soft:#f7e2df;
+  --even:#b4552d;
+  --odd:#8a7c6b;
+  --radius:14px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",
+              "Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:17px;line-height:1.85;letter-spacing:.01em;
+}
+.wrap{max-width:720px;margin:0 auto;padding:28px 20px 72px}
+header.top{padding:8px 0 18px;border-bottom:1px solid var(--line);margin-bottom:8px}
+.kicker{font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+        color:var(--accent);font-weight:700;margin-bottom:10px}
+h1{font-size:30px;line-height:1.35;margin:0 0 12px;font-weight:700;letter-spacing:-.01em}
+.lede{font-size:18px;color:var(--ink-soft);margin:0 0 14px}
+.meta{font-size:13px;color:var(--ink-soft)}
+h2{font-size:21px;margin:42px 0 14px;font-weight:700;padding-top:6px}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 16px;padding-left:22px}
+li{margin:6px 0}
+a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}
+.small,.cap{font-size:13.5px;color:var(--ink-soft)}
+.cap{margin:8px 0 0;text-align:center;line-height:1.6}
+.sub-h{font-size:16px;font-weight:700;margin:24px 0 8px}
+.code-line{background:var(--paper-2);border:1px solid var(--line);border-radius:10px;
+           padding:10px 12px;font-size:13px;line-height:1.6;overflow-x:auto;margin:10px 0 4px}
+.caret{color:var(--accent);font-weight:700}
+.box{background:var(--paper-2);border:1px solid var(--line);
+     border-radius:var(--radius);padding:18px;margin:16px 0}
+.pill{display:inline-block;padding:3px 11px;border-radius:999px;
+      font-size:13px;font-weight:600;line-height:1.6;margin:2px 4px 2px 0}
+.pill.good{background:var(--ok-soft);color:var(--ok)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.neutral{background:var(--paper-2);color:var(--ink-soft);border:1px solid var(--line)}
+
+/* 结论板 */
+.board{display:flex;flex-direction:column;gap:16px;
+       background:var(--ink);color:var(--paper);
+       border-radius:18px;padding:22px;margin:18px 0}
+.board-num{font-size:58px;line-height:1;font-weight:800;letter-spacing:-.03em}
+.board-num span{font-size:18px;font-weight:600;margin-left:6px;color:#d8cec1}
+.board-label{font-size:15px;color:#d8cec1;margin-top:8px;line-height:1.6}
+.board-side{display:flex;flex-direction:column;gap:6px;font-size:15px}
+.board-side .row{display:flex;align-items:center;justify-content:space-between;gap:16px;
+                 border-top:1px solid rgba(250,246,239,.16);padding-top:6px}
+.board-side .row:first-child{border-top:0;padding-top:0}
+.board-side b{font-variant-numeric:tabular-nums}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;
+     margin-right:7px;vertical-align:baseline}
+.dot.even{background:#e08a5f}
+.dot.odd{background:#b9ab99}
+
+/* 论文 vs 我们 */
+.cmp{margin:18px 0 4px}
+.cmp-row{display:grid;grid-template-columns:112px 1fr 46px;align-items:center;
+         gap:10px;margin:9px 0}
+.cmp-row span{font-size:13px;color:var(--ink-soft)}
+.track{height:14px;background:var(--paper-2);border:1px solid var(--line);
+       border-radius:999px;overflow:hidden}
+.track i{display:block;height:100%;background:var(--accent)}
+.cmp-row b{text-align:right;font-size:14px;font-variant-numeric:tabular-nums}
+
+/* 三个数字 */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
+.stats > div{background:var(--paper-2);border:1px solid var(--line);
+             border-radius:12px;padding:10px 8px;text-align:center}
+.stats b{display:block;font-size:20px;line-height:1.4;font-variant-numeric:tabular-nums}
+.stats span{font-size:12px;color:var(--ink-soft);line-height:1.4}
+
+/* 残基柱状图 */
+.chart{margin:18px 0 6px}
+.plot{position:relative;height:210px;display:flex;gap:7px;
+      padding-left:34px;border-bottom:1px solid var(--line)}
+.grid{position:absolute;left:34px;right:0;top:0;bottom:0;z-index:0;pointer-events:none}
+.gridline{position:absolute;left:0;right:0;border-top:1px dashed var(--line)}
+.gridline span{position:absolute;left:-34px;top:-10px;width:26px;text-align:right;
+               font-size:11px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.col{position:relative;flex:1;height:100%;z-index:1}
+.bar{position:absolute;left:12%;width:76%;bottom:0;border-radius:6px 6px 0 0;
+     background:var(--odd)}
+.bar.even{background:var(--even)}
+.ci{position:absolute;left:50%;width:2px;background:var(--ink);
+    transform:translateX(-50%);opacity:.62}
+.ci::before,.ci::after{content:"";position:absolute;left:-4px;width:10px;height:2px;
+                       background:var(--ink)}
+.ci::before{top:0}
+.ci::after{bottom:0}
+.xrow{display:flex;gap:7px;padding-left:34px;margin-top:8px}
+.xrow div{flex:1;text-align:center;line-height:1.35;font-size:13px;
+          font-variant-numeric:tabular-nums}
+.xrow span{display:block;font-size:11px;color:var(--ink-soft)}
+.xrow .even{color:var(--accent);font-weight:700}
+.xrow .odd{color:var(--ink-soft);font-weight:700}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;
+        color:var(--ink-soft);margin-top:12px;justify-content:center}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+.legend i.even{background:var(--even)}
+.legend i.odd{background:var(--odd)}
+
+/* 置信区间条 */
+.ci-wrap{margin:18px 0}
+.ci-axis{display:grid;grid-template-columns:1fr 1fr 1fr;font-size:12px;
+         color:var(--ink-soft);margin-bottom:6px}
+.ci-axis span:nth-child(2){text-align:center}
+.ci-axis span:nth-child(3){text-align:right}
+.ci-track{position:relative;height:34px;background:var(--paper-2);
+          border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.ci-band{position:absolute;top:0;bottom:0;background:var(--accent-soft);
+         border-left:1px solid var(--accent);border-right:1px solid var(--accent)}
+.ci-zero{position:absolute;left:0;top:-4px;bottom:-4px;width:2px;background:var(--bad)}
+.ci-dot{position:absolute;top:50%;width:14px;height:14px;border-radius:50%;
+        background:var(--accent);border:2px solid var(--paper);
+        transform:translate(-50%,-50%)}
+
+/* 按 key 的分组条 */
+.split{display:flex;height:26px;border-radius:999px;overflow:hidden;
+       border:1px solid var(--line);margin:14px 0 8px}
+.split div{height:100%;display:flex;align-items:center;justify-content:center;
+           font-size:11px;font-weight:700;color:#fff}
+.split .good{background:var(--ok)}
+.split .tie{background:var(--line);color:var(--ink-soft)}
+.split .bad{background:var(--bad)}
+.split-labels{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;
+              color:var(--ink-soft);justify-content:center}
+
+/* 代码补全格子 */
+.cells{display:grid;grid-template-columns:repeat(16,minmax(0,32px));
+       gap:3px;justify-content:start;margin:8px 0 4px}
+.cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+      border-radius:4px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
+.cell.eight{background:var(--ok-soft);color:var(--ok)}
+.cell.thirtytwo{background:var(--bad-soft);color:var(--bad)}
+.cells-cap{display:flex;justify-content:space-between;font-size:11px;
+           color:var(--ink-soft);max-width:560px;margin-bottom:10px}
+.run-label{font-size:13px;font-weight:700;color:var(--ink-soft);margin-top:12px}
+
+/* 花费 */
+.bigmoney{font-size:52px;font-weight:800;letter-spacing:-.02em;line-height:1.15;
+          margin:4px 0 2px;font-variant-numeric:tabular-nums}
+.costbar{display:flex;height:24px;border-radius:999px;overflow:hidden;
+         border:1px solid var(--line);margin:12px 0 6px}
+.costbar .miss{background:var(--accent)}
+.costbar .hit{background:var(--ok)}
+.costbar .out{background:var(--line)}
+
+/* 表格 */
+.table-wrap{overflow-x:auto;margin:14px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;
+      white-space:nowrap}
+th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+   color:var(--ink-soft);font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.total td{font-weight:700;border-top:1px solid var(--ink)}
+
+/* 折叠块 */
+details{border:1px solid var(--line);border-radius:var(--radius);
+        padding:0 16px;background:var(--paper-2);margin:16px 0}
+summary{cursor:pointer;font-weight:700;padding:14px 0}
+details[open]{padding-bottom:12px}
+dt{font-weight:700;margin-top:12px}
+dd{margin:4px 0 0;color:var(--ink-soft);font-size:15px}
+
+footer.src{margin-top:48px;padding-top:18px;border-top:1px solid var(--line);
+           font-size:13.5px;color:var(--ink-soft)}
+footer.src ul{padding-left:18px}
+footer.src li{margin:6px 0}
+footer.src code{word-break:break-all}
+
+@media (max-width:420px){
+  .wrap{padding:22px 16px 56px}
+  h1{font-size:26px}
+  .lede{font-size:17px}
+  h2{font-size:20px}
+  .board{padding:18px}
+  .board-num{font-size:48px}
+  .plot{height:180px;padding-left:30px;gap:5px}
+  .grid{left:30px}
+  .gridline span{left:-30px;width:24px;font-size:11px}
+  .xrow{padding-left:30px;gap:5px}
+  .xrow div{font-size:12px}
+  .xrow span{font-size:11px}
+  .cmp-row{grid-template-columns:92px 1fr 40px;gap:8px}
+  .cmp-row span{font-size:12px}
+  .stats b{font-size:17px}
+  .stats span{font-size:11px}
+  th,td{padding:6px 7px;font-size:13px}
+  .cells{gap:2px}
+  .cell{font-size:10px}
+}
+@media (min-width:700px){
+  .wrap{max-width:860px}
+  .board{flex-direction:row;align-items:center;justify-content:space-between}
+  .board-main{flex:1}
+  .board-side{min-width:250px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .grid2 > *{margin-top:0;margin-bottom:0}
+}
+@media (min-width:700px) and (min-aspect-ratio:4/5) and (max-aspect-ratio:5/4){
+  .wrap{max-width:800px;padding:36px 30px 80px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .wrap > p, .wrap > ul, .wrap > ol, .wrap > .box,
+  .wrap > details, .wrap > header.top, .wrap > .grid2,
+  .wrap > .table-wrap, .wrap > h2,
+  .wrap > .cmp, .wrap > .stats, .wrap > .costbar,
+  .wrap > .split{max-width:680px;margin-left:auto;margin-right:auto}
+  .chart,.ci-wrap,.board{max-width:680px;margin-left:auto;margin-right:auto}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="kicker">复现报告 · arXiv:2609.36322</div>
+  <h1>DeepSeek-V4.1-Flash 的隔位弱点，复现了</h1>
+  <p class="lede">12.8 万 token（词元，模型读写文本的最小单位）的长文本检索（NIAH，Needle in a Haystack，大海捞针）：目标记录的第一个 token 序号是 0、2、4…（偶数）时答对 80.0%，是 1、3、5…（奇数）时只有 70.4%。</p>
+  <div class="meta">2026-10-19 · 主实验 1,024 条回答 · 全部实验 $25.41</div>
+</header>
+
+<h2>一、结论</h2>
+
+<div class="board">
+  <div class="board-main">
+    <div class="board-num">+9.6<span>个百分点</span></div>
+    <div class="board-label">偶数位置平均<br>减奇数位置平均</div>
+  </div>
+  <div class="board-side">
+    <div class="row"><span><i class="dot even"></i>偶数位置</span><b>80.0%</b></div>
+    <div class="row"><span><i class="dot odd"></i>奇数位置</span><b>70.4%</b></div>
+    <div class="row"><span>样本（偶 / 奇）</span><b>504 / 520</b></div>
+    <div class="row"><span>轮次</span><b>共 2 轮</b></div>
+  </div>
+</div>
+
+<p class="cap">隔位 = 偶数位置和奇数位置答得不一样。位置 = 目标记录第一个 token 的序号（从 0 数）。周期 2 = 每 2 个位置重复一次。位置组 = 位置 ÷ 8 的余数（0–7），论文叫残基。</p>
+
+<div class="cmp">
+  <div class="cmp-row"><span>论文 最好−最差</span><div class="track"><i style="width:31%"></i></div><b>6.1</b></div>
+  <div class="cmp-row"><span>我们 最好−最差</span><div class="track"><i style="width:100%"></i></div><b>19.6</b></div>
+</div>
+<p class="cap">单位：百分点（两个百分比直接相减）。8 个位置组里最高减最低；论文每组 2,560 条，我们约 128 条，差 20 倍，不能直接比大小。</p>
+
+<h2>二、方法</h2>
+
+<div class="stats">
+  <div><b>128,000</b><span>token / 条</span></div>
+  <div><b>16,000</b><span>条记录</span></div>
+  <div><b>1,024</b><span>条回答（512 × 2 轮）</span></div>
+</div>
+
+<p class="cap" style="text-align:left;margin:0 0 8px">ℓ = 前垫（目标记录前面垫的普通文本）的长度，8–40 个 token；后面再用 48−ℓ 个后垫补齐，设计总长 128,000（实际最多差 1 个 token）。只改 ℓ，目标的位置就跟着挪。</p>
+
+<div class="box" style="padding:14px 12px">
+  <div style="display:flex;height:50px;border-radius:8px;overflow:hidden;border:1px solid var(--line);font-size:11px;text-align:center;color:var(--ink)">
+    <div style="flex:9;background:#efe6d8;display:flex;align-items:center;justify-content:center;line-height:1.2">开头</div>
+    <div style="flex:11;background:#e8dcc9;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.2">前垫<span style="font-size:10px">ℓ</span></div>
+    <div style="flex:25;background:#ded0ba;display:flex;align-items:center;justify-content:center;line-height:1.2">其他文本</div>
+    <div style="flex:31;background:var(--accent-soft);color:var(--accent);font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.2">16,000 条<span style="font-size:9px;font-weight:600">目标 #249</span></div>
+    <div style="flex:10;background:#e8dcc9;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.2">后垫<span style="font-size:10px">48−ℓ</span></div>
+    <div style="flex:8;background:#efe6d8;display:flex;align-items:center;justify-content:center;line-height:1.2">结尾</div>
+    <div style="flex:6;background:#e0d3bf;display:flex;align-items:center;justify-content:center;line-height:1.2">问</div>
+  </div>
+</div>
+<p class="cap">示意图，不按比例。「问」是最后一句提问：给出一个键，问它对应的值。其余部分固定，只改 ℓ。</p>
+
+<h2>三、8 个位置组</h2>
+
+<p class="cap" style="text-align:left;margin:0 0 4px">纵轴 = 准确率（%）。横轴 = 位置组：位置 ÷ 8 的余数，组号 0–7 一直循环。例：位置 24 → 组 0，位置 29 → 组 5。</p>
+<p class="cap" style="text-align:left;margin:0 0 10px">8 是 2 的倍数，所以组 0 / 2 / 4 / 6 就是偶数位置，组 1 / 3 / 5 / 7 是奇数位置。</p>
+<p class="take" style="font-size:15px;margin:0 0 6px;text-align:center">偶数组更高，但不整齐：组 4 低于组 3。</p>
+
+<div class="chart">
+  <div class="plot">
+    <div class="grid">
+      <div class="gridline" style="bottom:100%"><span>100</span></div>
+      <div class="gridline" style="bottom:75%"><span>75</span></div>
+      <div class="gridline" style="bottom:50%"><span>50</span></div>
+      <div class="gridline" style="bottom:25%"><span>25</span></div>
+      <div class="gridline" style="bottom:0%"><span>0</span></div>
+    </div>
+    <div class="col"><div class="bar even" style="height:85.5%"></div><div class="ci" style="bottom:76.6%;height:16.7%"></div></div>
+    <div class="col"><div class="bar odd" style="height:70.9%"></div><div class="ci" style="bottom:60.0%;height:21.8%"></div></div>
+    <div class="col"><div class="bar even" style="height:82.8%"></div><div class="ci" style="bottom:74.1%;height:16.7%"></div></div>
+    <div class="col"><div class="bar odd" style="height:74.2%"></div><div class="ci" style="bottom:63.6%;height:20.5%"></div></div>
+    <div class="col"><div class="bar even" style="height:72.2%"></div><div class="ci" style="bottom:60.9%;height:22.2%"></div></div>
+    <div class="col"><div class="bar odd" style="height:65.9%"></div><div class="ci" style="bottom:54.9%;height:21.3%"></div></div>
+    <div class="col"><div class="bar even" style="height:79.5%"></div><div class="ci" style="bottom:69.4%;height:19.4%"></div></div>
+    <div class="col"><div class="bar odd" style="height:70.3%"></div><div class="ci" style="bottom:59.4%;height:21.1%"></div></div>
+  </div>
+  <div class="xrow">
+    <div class="even">0<span>85</span></div>
+    <div class="odd">1<span>71</span></div>
+    <div class="even">2<span>83</span></div>
+    <div class="odd">3<span>74</span></div>
+    <div class="even">4<span>72</span></div>
+    <div class="odd">5<span>66</span></div>
+    <div class="even">6<span>80</span></div>
+    <div class="odd">7<span>70</span></div>
+  </div>
+  <div class="legend">
+    <span><i class="even"></i>偶数组</span>
+    <span><i class="odd"></i>奇数组</span>
+    <span>竖线 = 95% 区间</span>
+  </div>
+</div>
+<p class="cap">竖线 = 95% 区间：重做实验，95% 的结果会落在这段里；越长越不确定。</p>
+<p class="cap">区间按题有放回地重抽（bootstrap）算出；题 = 一对固定的「键:值」，共 64 道。每组只有约 128 条，单组竖线会重叠，整体差距看下一节。</p>
+
+<details>
+<summary>精确数字（样本量 / 区间）</summary>
+<div class="table-wrap">
+<table>
+  <tr><th>位置组</th><th class="num">n</th><th class="num">准确率</th><th class="num">95% 区间</th></tr>
+  <tr><td>0（偶）</td><td class="num">124</td><td class="num">85.5%</td><td class="num">76.6–93.3</td></tr>
+  <tr><td>1（奇）</td><td class="num">134</td><td class="num">70.9%</td><td class="num">60.0–81.8</td></tr>
+  <tr><td>2（偶）</td><td class="num">122</td><td class="num">82.8%</td><td class="num">74.1–90.8</td></tr>
+  <tr><td>3（奇）</td><td class="num">132</td><td class="num">74.2%</td><td class="num">63.6–84.1</td></tr>
+  <tr><td>4（偶）</td><td class="num">126</td><td class="num">72.2%</td><td class="num">60.9–83.1</td></tr>
+  <tr><td>5（奇）</td><td class="num">126</td><td class="num">65.9%</td><td class="num">54.9–76.2</td></tr>
+  <tr><td>6（偶）</td><td class="num">132</td><td class="num">79.5%</td><td class="num">69.4–88.8</td></tr>
+  <tr><td>7（奇）</td><td class="num">128</td><td class="num">70.3%</td><td class="num">59.4–80.5</td></tr>
+</table>
+</div>
+<p class="cap">n = 每组跑过的提示条数（512 条提示 × 2 轮）。提示 = 发给模型的一整段输入，每条约 128,000 token。按目标实际位置分组。25 条分词（切成 token）后移位、22 条改变奇偶，净 4 条/轮；两轮合计 504 / 520。</p>
+</details>
+
+<h2>四、这个差距是真的吗</h2>
+
+<p style="font-size:15px;margin:0 0 10px;text-align:center;font-weight:600">是真的，不是运气，也不是靠一两道题。<br>但具体多大不确定：重做一次，可能落在 +1.8 到 +17.5 之间。</p>
+
+<p>好比两个班考试：甲班平均 80 分，乙班 70 分。你会追问两件事：这 10 分会不会是抽到的学生碰巧强？会不会是一两个学霸拉高的？下面三个办法，就是查这两件事。</p>
+
+<p class="sub-h">办法一：换一批题，重算</p>
+
+<p>64 道题（每道是一对固定的「键:值」）就是我们的「学生名单」。把 64 道题有放回地随机重抓 64 道（同一道可能被抓到多次），重算一次「偶数位减奇数位」。重复 10 万次，得到 10 万个差距。</p>
+
+<svg viewBox="0 0 360 145" style="width:100%;height:auto;display:block;margin:14px 0 4px" role="img" aria-label="重抽 10 万次的差距分布">
+<line x1="8" y1="120" x2="352" y2="120" stroke="#e2d7c6" stroke-width="1"/>
+<rect x="8.0" y="119.8" width="6.1" height="0.2" fill="#9c3a30" fill-opacity="0.55"/>
+<rect x="14.1" y="119.5" width="6.1" height="0.5" fill="#9c3a30" fill-opacity="0.55"/>
+<rect x="20.3" y="119.1" width="6.1" height="0.9" fill="#9c3a30" fill-opacity="0.55"/>
+<rect x="26.4" y="119.0" width="6.1" height="1.0" fill="#9c3a30" fill-opacity="0.55"/>
+<rect x="32.6" y="118.1" width="6.1" height="1.9" fill="#9c3a30" fill-opacity="0.55"/>
+<rect x="38.7" y="117.4" width="6.1" height="2.6" fill="#9c3a30" fill-opacity="0.55"/>
+<rect x="44.9" y="116.6" width="6.1" height="3.4" fill="#9c3a30" fill-opacity="0.55"/>
+<rect x="51.0" y="115.5" width="6.1" height="4.5" fill="#9c3a30" fill-opacity="0.55"/>
+<rect x="57.1" y="113.8" width="6.1" height="6.2" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="63.3" y="111.8" width="6.1" height="8.2" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="69.4" y="110.1" width="6.1" height="9.9" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="75.6" y="105.7" width="6.1" height="14.3" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="81.7" y="103.4" width="6.1" height="16.6" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="87.9" y="96.1" width="6.1" height="23.9" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="94.0" y="91.8" width="6.1" height="28.2" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="100.1" y="85.5" width="6.1" height="34.5" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="106.3" y="80.2" width="6.1" height="39.8" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="112.4" y="73.2" width="6.1" height="46.8" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="118.6" y="63.5" width="6.1" height="56.5" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="124.7" y="61.1" width="6.1" height="58.9" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="130.9" y="48.4" width="6.1" height="71.6" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="137.0" y="47.3" width="6.1" height="72.7" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="143.1" y="35.2" width="6.1" height="84.8" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="149.3" y="34.1" width="6.1" height="85.9" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="155.4" y="25.2" width="6.1" height="94.8" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="161.6" y="23.9" width="6.1" height="96.1" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="167.7" y="24.5" width="6.1" height="95.5" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="173.9" y="20.0" width="6.1" height="100.0" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="180.0" y="28.0" width="6.1" height="92.0" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="186.1" y="25.1" width="6.1" height="94.9" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="192.3" y="34.7" width="6.1" height="85.3" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="198.4" y="36.4" width="6.1" height="83.6" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="204.6" y="43.7" width="6.1" height="76.3" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="210.7" y="48.8" width="6.1" height="71.2" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="216.9" y="57.7" width="6.1" height="62.3" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="223.0" y="65.2" width="6.1" height="54.8" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="229.1" y="72.0" width="6.1" height="48.0" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="235.3" y="81.5" width="6.1" height="38.5" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="241.4" y="85.5" width="6.1" height="34.5" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="247.6" y="92.2" width="6.1" height="27.8" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="253.7" y="96.3" width="6.1" height="23.7" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="259.9" y="100.0" width="6.1" height="20.0" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="266.0" y="105.0" width="6.1" height="15.0" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="272.1" y="107.6" width="6.1" height="12.4" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="278.3" y="111.6" width="6.1" height="8.4" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="284.4" y="112.5" width="6.1" height="7.5" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="290.6" y="114.7" width="6.1" height="5.3" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="296.7" y="116.1" width="6.1" height="3.9" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="302.9" y="117.3" width="6.1" height="2.7" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="309.0" y="117.7" width="6.1" height="2.3" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="315.1" y="118.3" width="6.1" height="1.7" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="321.3" y="118.9" width="6.1" height="1.1" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="327.4" y="119.4" width="6.1" height="0.6" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="333.6" y="119.4" width="6.1" height="0.6" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="339.7" y="119.6" width="6.1" height="0.4" fill="#b4552d" fill-opacity="0.55"/>
+<rect x="345.9" y="119.8" width="6.1" height="0.2" fill="#b4552d" fill-opacity="0.55"/>
+<line x1="57.1" y1="14" x2="57.1" y2="120" stroke="#9c3a30" stroke-width="1.5"/>
+<line x1="175.1" y1="14" x2="175.1" y2="120" stroke="#b4552d" stroke-width="1.5" stroke-dasharray="3 3"/>
+<text x="57.1" y="11" text-anchor="middle" font-size="12.5" fill="#9c3a30" font-weight="700">0 = 一样准</text>
+<text x="175.1" y="11" text-anchor="middle" font-size="12.5" fill="#b4552d" font-weight="700">实测 +9.6</text>
+<text x="8.0" y="136" text-anchor="start" font-size="13" fill="#6b6157" font-weight="400">-4</text>
+<text x="57.1" y="136" text-anchor="middle" font-size="13" fill="#9c3a30" font-weight="700">0</text>
+<text x="118.6" y="136" text-anchor="middle" font-size="13" fill="#6b6157" font-weight="400">5</text>
+<text x="180.0" y="136" text-anchor="middle" font-size="13" fill="#6b6157" font-weight="400">10</text>
+<text x="241.4" y="136" text-anchor="middle" font-size="13" fill="#6b6157" font-weight="400">15</text>
+<text x="302.9" y="136" text-anchor="middle" font-size="13" fill="#6b6157" font-weight="400">20</text>
+</svg>
+
+<p class="cap">横轴 = 一次重算得到的差距（百分点）。竖轴 = 有多少次重算落到这个差距，柱子越高越常见。0 = 两边一样准。10 万个差距里，99.2% 在 0 右边，只有 0.8% 在 0 左边；中间 95% 落在 +1.8 ~ +17.5。如果只是运气，重抽结果会围着 0 左右摆；现在几乎全在右边，所以不像运气。</p>
+
+<p style="font-size:14px;margin:8px 0 0;text-align:center;font-weight:600">换题重算，几乎每次都是偶数位更好。</p>
+
+<p class="sub-h">办法二：算「碰巧」的概率</p>
+
+<div class="box" style="text-align:center">
+  <div style="font-size:42px;font-weight:800;color:var(--accent);line-height:1.1">1.6%</div>
+  <p class="small" style="margin:8px 0 0">p = 0.016。假如两边其实一样准，做 100 次这样的实验，只有约 1.6 次会碰巧测出 +9.6 这么大的差距。习惯上低于 5% 就说「不太可能是碰巧」。</p>
+</div>
+
+<p class="sub-h">办法三：逐题看</p>
+
+<p>把 64 道题分开算，看有几道是偶数位更好。</p>
+
+<div class="split">
+  <div class="good" style="width:42.2%">27</div>
+  <div class="tie" style="width:39.1%">25</div>
+  <div class="bad" style="width:18.8%">12</div>
+</div>
+<p class="cap">绿 27 道：偶数位更好 · 灰 25 道：打平 · 红 12 道：奇数位更好。</p>
+
+<p style="font-size:14px;margin:8px 0 0;text-align:center;font-weight:600">赢的题数是输的两倍多，不是靠一两道题。</p>
+
+<details>
+<summary>具体怎么算的</summary>
+<p>同一道题会被考 16 次（8 个位置组 × 2 轮），这 16 个答案彼此相关，不能当成 16 个独立样本。所以抽签时整道题一起抽：抽中一道，就把它 16 个答案一起带进来。这叫 bootstrap（自助重采样）。</p>
+<p>p 值 = 假如其实没差别，碰巧看到这么大差别的概率。95% 区间 = 把 10 万个差距从小到大排，去掉最小的 2.5% 和最大的 2.5%，剩下的范围。</p>
+</details>
+
+<h2>五、第二个实验：续写代码，没复现</h2>
+
+<p style="font-size:15px;margin:0 0 10px;text-align:center;font-weight:600">论文的第二个实验，我们没看到同样的规律。</p>
+
+<p>前面是答题，这个是续写代码：给模型看半行代码，让它填下一个词。原文这里填 <code>8</code>，表示用 FP8（8 位浮点：用 8 个二进制位存一个数，省显存）；如果填 <code>32</code>，就变成 FP32（32 位浮点：更精确，但更占显存）——那就写错了。</p>
+
+<pre class="code-line"><code>T.Cast(compute_dtype, T.Cast(FP<span class="caret">▮</span></code></pre>
+<p class="cap" style="text-align:left;margin:4px 0 0">▮ = 模型要填的下一个词：<code>8</code> 或 <code>32</code>。</p>
+
+<p>做法：在代码前面垫一段填充文本，长度 L 从 23 个 token 加到 38 个。每换一个 L，重新问一次。论文附录 B.2 的对话实验说：L 是奇数答 8，偶数答 32；也就是每加一个 token，答案翻一次。</p>
+
+<p>「对话格式」= 把输入包成「用户问、助手答」的聊天模板。我们的接口只提供对话版模型。</p>
+
+<div class="run-label">第 1 遍（对话格式）</div>
+<div class="cells">
+  <div class="cell eight">8</div><div class="cell eight">8</div><div class="cell thirtytwo">32</div><div class="cell eight">8</div>
+  <div class="cell eight">8</div><div class="cell eight">8</div><div class="cell thirtytwo">32</div><div class="cell eight">8</div>
+  <div class="cell eight">8</div><div class="cell eight">8</div><div class="cell thirtytwo">32</div><div class="cell eight">8</div>
+  <div class="cell eight">8</div><div class="cell eight">8</div><div class="cell thirtytwo">32</div><div class="cell eight">8</div>
+</div>
+<div class="cells-cap"><span>L = 23（左）</span><span>每格 +1 →</span><span>L = 38（右）</span></div>
+
+<div class="run-label">第 2 遍（同一份输入，再问一次；答案可能变，模型有随机性）</div>
+<div class="cells">
+  <div class="cell eight">8</div><div class="cell eight">8</div><div class="cell eight">8</div><div class="cell eight">8</div>
+  <div class="cell eight">8</div><div class="cell eight">8</div><div class="cell eight">8</div><div class="cell eight">8</div>
+  <div class="cell eight">8</div><div class="cell eight">8</div><div class="cell eight">8</div><div class="cell eight">8</div>
+  <div class="cell thirtytwo">32</div><div class="cell eight">8</div><div class="cell thirtytwo">32</div><div class="cell eight">8</div>
+</div>
+<div class="cells-cap"><span>L = 23（左）</span><span>每格 +1 →</span><span>L = 38（右）</span></div>
+
+<p style="margin:16px 0 8px">第 1 遍：<code>32</code> 只出现在 L = 25、29、33、37，每 4 个才一次。第 2 遍：几乎全是 <code>8</code>，只有 L = 35、37 是 <code>32</code>。</p>
+
+<p style="font-size:14px;margin:0 0 10px;text-align:center;font-weight:600">都不是「奇 8 偶 32」，所以不算复现。</p>
+
+<p class="cap" style="text-align:left">第三遍用原始格式（不套对话模板）：L = 24–39，16 个全部答 <code>8</code>。三遍共 48 次。</p>
+<p class="cap" style="text-align:left">为什么对不上：论文的对话实验用 0910 版，接口是 1017 版，版本不同可能是原因。第三遍只是「不套聊天模板」，模型本身仍是对话版；论文图 1 的原始模型（没做过对话微调）接口不提供，没法直接比。</p>
+
+<h2>六、打折扣</h2>
+
+<div class="grid2">
+  <div class="box">
+    <p><span class="pill warn">提示词是重建的</span></p>
+    <p class="small" style="margin:0">不是逐字节复刻。</p>
+  </div>
+  <div class="box">
+    <p><span class="pill warn">准确率更低</span></p>
+    <p class="small" style="margin:0">我们 75.1%，论文 92.4%。</p>
+  </div>
+  <div class="box">
+    <p><span class="pill warn">模型有随机性</span></p>
+    <p class="small" style="margin:0">8.4% 的提示一轮对、一轮错。</p>
+  </div>
+  <div class="box">
+    <p><span class="pill warn">只测了一个模型</span></p>
+    <p class="small" style="margin:0">论文和接口都是 V4.1-Flash，但版本不同：论文用 Post-trained-0910（9 月 10 日的后训练版），接口给 DeepSeek-V4.1-Flash-1017（10 月 17 日版，官方定价页的版本名）。也没有 V4-Pro（更大旗舰）或原始模型对照。</p>
+  </div>
+</div>
+
+<h2>七、花费</h2>
+
+<div class="bigmoney">$25.41</div>
+<div class="costbar">
+  <div class="miss" style="width:98.1%"></div>
+  <div class="hit" style="width:1.9%"></div>
+</div>
+<p class="cap">花费占比：未命中（要重算）98.1% · 命中（复用）1.9%。请求命中率 49.3%，token 命中率 49.6%。</p>
+
+<div class="stats">
+  <div><b>1.649 亿</b><span>输入 token</span></div>
+  <div><b>1,336</b><span>次计费调用</span></div>
+  <div><b>252</b><span>次 402（余额不足）</span></div>
+</div>
+<p class="cap">1,336 = 主实验 1,024 + 早期 264 + 代码补全 48；另有 252 次 402 失败，未计入。高峰价；低谷约 $12.7。</p>
+
+<details>
+<summary>八、想自己复现</summary>
+<p class="small" style="margin:10px 0 0">仓库：<a href="https://github.com/lwang2070/dsv4-phase-repro">github.com/lwang2070/dsv4-phase-repro</a>。密钥放在环境变量 <code>DEEPSEEK_API_KEY</code>（或 <code>~/.claude/credentials/deepseek_api_key</code>）。</p>
+<div class="box" style="margin-top:10px">
+<pre style="margin:0;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere"><code>git clone https://github.com/lwang2070/dsv4-phase-repro
+cd dsv4-phase-repro
+# 先按 README 准备 tokenizer/ 和 data/train.txt
+
+uv run -q --with tokenizers python scripts/build_eval.py \
+  --per-residue 64 --out data/eval_n64.jsonl
+
+uv run -q --with httpx python scripts/run_eval.py \
+  --input data/eval_n64.jsonl --out data/results_n64.jsonl
+
+uv run -q --with httpx python scripts/run_eval.py \
+  --input data/eval_n64.jsonl --out data/results_n64_rep.jsonl
+
+uv run -q --with numpy python scripts/analyze_combined.py</code></pre>
+</div>
+<p class="cap">统计脚本：<code>scripts/analyze_combined.py</code></p>
+</details>
+
+<details>
+<summary>名词表</summary>
+<dl>
+  <dt>token（词元）</dt><dd>模型读写文本的最小单位。一个英文单词通常算 1 个。</dd>
+  <dt>ℓ（前垫长度）</dt><dd>目标记录前面垫了多少个普通 token，8–40。后面用 48−ℓ 个后垫补齐，总长不变。</dd>
+  <dt>位置</dt><dd>目标记录第一个 token 在提示里的序号，从 0 数。</dd>
+  <dt>位置组（论文叫残基，residue）</dt><dd>位置 ÷ 8 的余数，0 到 7，一直循环。例：位置 24 → 组 0，位置 29 → 组 5。</dd>
+  <dt>题</dt><dd>一对固定的「键:值」。全实验共 64 道，每道各考 16 次。</dd>
+  <dt>bootstrap（自助重采样）</dt><dd>整组抽签：把 64 道题有放回地随机抽 64 道，重算差距，重复很多次，看结果波动多大。</dd>
+  <dt>p 值</dt><dd>没差别时，碰巧看到这么大差别的概率。越小越可信。</dd>
+  <dt>95% 区间</dt><dd>重复抽样时，约 95% 的结果会落在这个范围。</dd>
+  <dt>百分点</dt><dd>两个百分比直接相减的单位。80% 减 70% = 10 个百分点（不是 10%）。</dd>
+  <dt>FP8</dt><dd>8 位浮点，比常用 16 位更省显存。</dd>
+</dl>
+</details>
+
+<footer class="src">
+  <ul>
+    <li>论文：<a href="https://arxiv.org/abs/2609.36322">Periodic Weak Spots（arXiv:2609.36322）</a></li>
+    <li>论文数字：Figure 2（图 2，6.1 个百分点）、Table 7（表 7，92.38%）。</li>
+    <li>定价：<a href="https://api-docs.deepseek.com/quick_start/pricing">DeepSeek API</a></li>
+    <li>语料：<a href="https://huggingface.co/datasets/agentlans/high-quality-english-sentences">agentlans/high-quality-english-sentences</a></li>
+    <li>分词器：<a href="https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash">deepseek-ai/DeepSeek-V4.1-Flash</a></li>
+    <li>数据与脚本：<code>~/projects/dsv4-phase-repro/</code></li>
+  </ul>
+</footer>
+
+</div>
+</body>
+</html>

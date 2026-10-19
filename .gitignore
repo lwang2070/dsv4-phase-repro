@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+
+# Large assets, regenerable or downloadable (see README)
+data/train.txt
+data/train.txt.gz
+data/eval_*.jsonl
+!data/eval_index.jsonl
+tokenizer/tokenizer.json
+tokenizer/tokenizer_config.json
+tokenizer/chat_template.jinja
+
+# Third-party paper files
+paper/
