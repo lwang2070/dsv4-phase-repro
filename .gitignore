@@ -8,9 +8,11 @@ data/train.txt
 data/train.txt.gz
 data/eval_*.jsonl
 !data/eval_index.jsonl
-tokenizer/tokenizer.json
-tokenizer/tokenizer_config.json
-tokenizer/chat_template.jinja
+# The bare name is needed: `tokenizer/` does not match a symlink.
+tokenizer
 
 # Third-party paper files
 paper/
+
+# Local worktrees
+.claude/worktrees/

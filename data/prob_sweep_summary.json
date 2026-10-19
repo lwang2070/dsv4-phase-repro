@@ -1,0 +1,220 @@
+{
+ "chat_temperature_1": {
+  "runs": 4,
+  "per_L": [
+   {
+    "L": 23,
+    "mean_delta": 0.8204505627637161,
+    "runs": 4,
+    "predicted": "8",
+    "matches": true
+   },
+   {
+    "L": 24,
+    "mean_delta": 0.0929098216743692,
+    "runs": 4,
+    "predicted": "32",
+    "matches": false
+   },
+   {
+    "L": 25,
+    "mean_delta": 0.8545347519903055,
+    "runs": 4,
+    "predicted": "8",
+    "matches": true
+   },
+   {
+    "L": 26,
+    "mean_delta": -0.052158092011117055,
+    "runs": 4,
+    "predicted": "32",
+    "matches": true
+   },
+   {
+    "L": 27,
+    "mean_delta": 0.9514647003579699,
+    "runs": 4,
+    "predicted": "8",
+    "matches": true
+   },
+   {
+    "L": 28,
+    "mean_delta": 0.36479577109910555,
+    "runs": 4,
+    "predicted": "32",
+    "matches": false
+   },
+   {
+    "L": 29,
+    "mean_delta": 0.8629328763467131,
+    "runs": 4,
+    "predicted": "8",
+    "matches": true
+   },
+   {
+    "L": 30,
+    "mean_delta": -0.19329821577988868,
+    "runs": 4,
+    "predicted": "32",
+    "matches": true
+   },
+   {
+    "L": 31,
+    "mean_delta": 0.4491098890940589,
+    "runs": 4,
+    "predicted": "8",
+    "matches": true
+   },
+   {
+    "L": 32,
+    "mean_delta": -0.19884388908539424,
+    "runs": 4,
+    "predicted": "32",
+    "matches": true
+   },
+   {
+    "L": 33,
+    "mean_delta": 0.6900945146344879,
+    "runs": 4,
+    "predicted": "8",
+    "matches": true
+   },
+   {
+    "L": 34,
+    "mean_delta": -0.47428060197343375,
+    "runs": 4,
+    "predicted": "32",
+    "matches": true
+   },
+   {
+    "L": 35,
+    "mean_delta": 0.8178582014683844,
+    "runs": 4,
+    "predicted": "8",
+    "matches": true
+   },
+   {
+    "L": 36,
+    "mean_delta": -0.050687226917979375,
+    "runs": 4,
+    "predicted": "32",
+    "matches": true
+   },
+   {
+    "L": 37,
+    "mean_delta": 0.5571899662191555,
+    "runs": 4,
+    "predicted": "8",
+    "matches": true
+   },
+   {
+    "L": 38,
+    "mean_delta": 0.0069426099302604405,
+    "runs": 4,
+    "predicted": "32",
+    "matches": false
+   }
+  ],
+  "odd_mean_delta": 0.7504544328593489,
+  "even_mean_delta": -0.06307747788300974,
+  "odd_minus_even": 0.8135319107423586,
+  "sign_matches": 13,
+  "n_lengths": 16,
+  "even_below_zero": 5,
+  "odd_above_zero": 8
+ },
+ "chat_temperature_0": [
+  {
+   "run": 1,
+   "answers": {
+    "23": "8",
+    "24": "32",
+    "25": "8",
+    "26": "32",
+    "27": "8",
+    "28": "8",
+    "29": "8",
+    "30": "32",
+    "31": "8",
+    "32": "32",
+    "33": "8",
+    "34": "32",
+    "35": "8",
+    "36": "32",
+    "37": "8",
+    "38": "32"
+   },
+   "matches": 15,
+   "n": 16
+  },
+  {
+   "run": 2,
+   "answers": {
+    "23": "8",
+    "24": "8",
+    "25": "8",
+    "26": "32",
+    "27": "8",
+    "28": "8",
+    "29": "8",
+    "30": "32",
+    "31": "8",
+    "32": "32",
+    "33": "8",
+    "34": "32",
+    "35": "8",
+    "36": "8",
+    "37": "8",
+    "38": "8"
+   },
+   "matches": 12,
+   "n": 16
+  }
+ ],
+ "raw_temperature_1": [
+  {
+   "run": 1,
+   "n": 16,
+   "min_delta": 0.9202809156266721,
+   "max_delta": 0.9976386964152514,
+   "top1_8": 16,
+   "top1_32": 0,
+   "usage": {
+    "prompt_tokens": 16248,
+    "completion_tokens": 16,
+    "prompt_cache_hit_tokens": 12288,
+    "prompt_cache_miss_tokens": 3960
+   }
+  },
+  {
+   "run": 2,
+   "n": 16,
+   "min_delta": 0.9450264646172071,
+   "max_delta": 0.9976386964152514,
+   "top1_8": 16,
+   "top1_32": 0,
+   "usage": {
+    "prompt_tokens": 16248,
+    "completion_tokens": 16,
+    "prompt_cache_hit_tokens": 12288,
+    "prompt_cache_miss_tokens": 3960
+   }
+  }
+ ],
+ "fim_temperature_1": [
+  {
+   "run": 1,
+   "n": 16,
+   "min_delta": 0.9939739963576387,
+   "max_delta": 0.9997000474641553,
+   "top1_8": 16,
+   "top1_32": 0,
+   "usage": {
+    "prompt_tokens": 16392,
+    "completion_tokens": 16,
+    "prompt_cache_hit_tokens": 13297,
+    "prompt_cache_miss_tokens": 3095
+   }
+  }
+ ]
+}

@@ -19,8 +19,10 @@ against the DeepSeek API (`deepseek-flash`, reported as
 - 27 bindings favor even positions, 25 tie, 12 favor odd positions.
 - Two independent runs: +12.5 pp and +6.7 pp.
 
-The second experiment in the paper (Figure 1, code completion) was **not**
-reproduced. See "Second experiment" below.
+The V4.1-Flash chat version of the second experiment (Appendix B.2, code
+completion) was partially reproduced: every odd filler length favors `8`, but
+only five of the eight even lengths flip to `32`, so the even side is much
+weaker than in the paper. See "Second experiment" below.
 
 ## Setup
 
@@ -37,12 +39,20 @@ scripts/run_eval.py          call the chat API (resumable)
 scripts/analyze_combined.py  pooled statistics -> data/page_data.json
 scripts/analyze.py           single-run statistics
 scripts/code_completion.py   Figure 1 control, raw completion endpoint
-scripts/code_completion_chat.py  Figure 1 control, chat format
+scripts/code_completion_chat.py  Appendix B.2 chat-format control
+scripts/prob_sweep.py        filler sweep: chat / raw / FIM, real probabilities
+scripts/analyze_prob_sweep.py  summarize the sweep files
 scripts/probe_*.py           tokenizer probes used while designing the prompt
 code/kernel.py               FP8 kernel prefix from the paper (unmodified)
 data/results_n64*.jsonl      the 1,024 API responses (shipped)
 data/results_n16*.jsonl      early 16-per-group pilot
-data/code_completion*.json   code-completion responses
+data/code_completion*.json   first-round responses: `code_completion.json`
+                             is raw completion (never had the seam bug);
+                             `code_completion_chat.json` is chat format with
+                             the pre-fix prompt, one token off (kept for the
+                             record; reruns write `*_rerun.json`)
+data/prob_sweep_*.json       filler sweeps at temperature 0/1 (chat/raw/FIM)
+data/prob_sweep_summary.json summary used in the report
 data/eval_index.jsonl        id/ell/target_pos for the 512 prompts
 data/page_data.json          every number cited in the report
 report.html                  static Chinese report (open in a browser)
@@ -110,30 +120,71 @@ The shipped `data/results_n64*.jsonl` let you re-run step 3 without spending
 anything. Step 3 falls back to `data/eval_index.jsonl` when the full prompt
 file `data/eval_n64.jsonl` is absent.
 
-## Second experiment (Figure 1)
+## Second experiment (Appendix B.2)
 
-The paper's Figure 1 asks the model to finish a line of FP8 kernel code. The
-next token is `8` (the original code, FP8) or `32` (FP32, wrong). Appendix B.2
-reports, for the chat format, `8` at odd filler lengths `L` and `32` at even
-ones.
+The paper asks the model to finish a line of FP8 kernel code. The next token
+is `8` (the original code, FP8) or `32` (FP32, wrong). For
+DeepSeek-V4.1-Flash with the chat prompt, Appendix B.2 reports, for filler
+families A, B, and C, `8` at odd filler lengths `L` and `32` at even ones
+(period 2, matching its compression stride); family D answers `8` at
+`L = 23..29` and then alternates. We use family A. Figure 1 itself uses the
+base model, which the API does not serve; what we can test is the
+V4.1-Flash chat result.
 
-We ran `L = 23..38` twice through the chat endpoint:
+We partially reproduce the alternation. Four temperature-1 sweeps of
+`L = 23..38` (`scripts/prob_sweep.py --format chat`) agree with the paper's
+direction at 13 of 16 lengths. Mean margin `P(8) - P(32)`: **+0.75 at odd L,
+-0.06 at even L**; the paper's family A gives +0.35 and -0.57. Every odd
+length favors `8`; only five of eight even lengths flip to `32`. The three
+disagreements are all even lengths: +0.093, +0.365, and +0.007 (the last
+mean is +0.007, essentially a tie; +0.093 is a real gap in the other
+direction, not a tie). Two temperature-0 sweeps score 15/16 and 12/16 in top-1,
+again with `32` only at even lengths. Repeating the same prompt changes some
+answers even at temperature 0; we did not verify why.
 
-- Run 1: `32` at L = 25, 29, 33, 37 (period 4).
-- Run 2: `32` at L = 35, 37 only.
-- Raw completion format (`/beta/completions`), L = 24..39: all `8`.
+Our first attempt missed the pattern because of a one-token reconstruction
+error: the filler already ends with a newline, and we added `"\n\n"` after it,
+which is two blank lines instead of one. The scored token moved one position
+later, so the parity no longer lined up with `L`; the old data looked like
+period 4 or unstable. The scripts now assert the paper's scored position,
+`t = 1004 + L`.
 
-Neither chat run matches the paper's odd/even pattern, so we do **not** claim
-a replication of Figure 1. Differences that may explain it: the paper's chat
-experiment uses the Post-trained-0910 checkpoint, the API serves the 1017
-version; and Figure 1 itself uses the base model, which the API does not serve.
+FIM (`--format fim`, `/beta/completions` with a neutral suffix
+`# end of file`, `L = 24..39`) is included as a control, not as the paper's
+setting: with a suffix all 16 lengths answer `8`, with
+`P(8) - P(32) >= 0.99`. The paper's prompt has no suffix. Raw completion
+(`--format raw`) also answers `8` at every length, but it changes more than
+the suffix: no instruction, no chat template, and a different endpoint. So
+the defensible claim is narrower: on V4.1-Flash-1017, leaving the
+"chat format with no suffix" setup made the alternation disappear; we cannot
+attribute that to the suffix alone. In the paper's other settings the period
+is four, not two: the base model with a raw prefix (Appendix B.1) and the
+chat-formatted V4-Flash-0731 (Appendix B.2). We test neither; our raw run is
+V4.1-Flash-1017.
 
-Run it with:
+Reproduce the numbers:
 
 ```bash
-uv run -q --with tokenizers --with httpx python scripts/code_completion_chat.py \
-  --n-min 8 --n-max 23 --out data/code_completion_chat_run1.json
+for i in 1 2 3 4; do
+  uv run -q --with tokenizers --with httpx python scripts/prob_sweep.py \
+    --format chat --temperature 1 --out data/prob_sweep_chat_t1_run$i.json
+done
+uv run -q python scripts/analyze_prob_sweep.py
 ```
+
+The analyzer needs all nine files (4 chat at temperature 1, 2 chat at
+temperature 0, 2 raw, 1 FIM). The shipped files satisfy that; if you delete
+one, the analyzer stops instead of summarizing a partial sweep. Regenerate
+the others with `--format chat --temperature 0` twice, `--format raw` twice,
+and `--format fim` once, matching the file names in `data/`.
+
+The separate chat script (`scripts/code_completion_chat.py`) was fixed the
+same way: one newline at the seam, and the same position assertion.
+
+The source prefix comes from `code/kernel.py`; the first token scored is the
+`8` in `T.Cast(compute_dtype, T.Cast(FP8...`. Raw completion
+(`--format raw`, no chat template, `L = 24..39`) answers `8` at every length
+as well.
 
 ## Cost
 
@@ -141,12 +192,20 @@ uv run -q --with tokenizers --with httpx python scripts/code_completion_chat.py 
 tokens, 1,823 output tokens. **$25.41 at peak prices**, about $12.7 off-peak
 (50% discount). Another 252 requests failed with HTTP 402 and were not billed.
 
+The later second-experiment sweeps add about 400 requests. Responses that
+reached a data file (224 calls, including 80 that a later rerun overwrote)
+used 230,192 input tokens and 224 output tokens, about $0.013. The rest were
+exploratory calls without a saved usage record; at the same unit price they
+add roughly $0.011. **All calls together are about $25.43.**
+
 ## Caveats
 
 - The paper does not publish its intro text. Our prompt is a faithful
-  reconstruction of Appendix C.1, not byte-identical.
-- The API is not deterministic: repeated runs agreed on 80% of answers.
-  Headline numbers average two runs.
+  reconstruction of Appendix C.1, not byte-identical. Our first chat prompt
+  for the second experiment also had one extra newline at the
+  filler/code seam; see "Second experiment".
+- The API is not deterministic: at temperature 0, repeated runs agreed on
+  80% of answers. Headline numbers average two runs.
 - Overall accuracy is 75.1%, below the paper's 92.4%, so the task is harder
   here.
 - Only V4.1-Flash was tested; no V4-Pro and no base model.
